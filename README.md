@@ -6,6 +6,11 @@ RNA2DPred is a Python-based program to predict RNA secondary structure using eit
 
 The main file for structure prediction is RNA2DPred.py, but the other file motif_alignment.py can be run independently as an alignment tool.
 
+## Prerequisites
+- ViennaRNA package, which its instruction of installation is here: https://www.tbi.univie.ac.at/RNA/#download
+- IBM ILOG CPLEX Optimization Studio, which can be downloaded using academic email address here: https://www.ibm.com/products/ilog-cplex-optimization-studio
+
+
 ## Usage of motif_alignment
 The usage of program motif_alignment.py is like below:<br/>
 ``` python3  motif_alignment.py --sequence [sequence filename]/[sequence] --motif [motif filename]/[motif sequence] --identity [0 - 1] --format [0,1] --output [output filename] --verbose ```
