@@ -165,12 +165,8 @@ def main_argument():
     parser.add_argument('-p',
         '--pseudoknot',
         action ='store_true', 
-    	help ="allowing the formation of pseudoknots")
-    
-    parser.add_argument('-l',
-        '--lone_basepair',
-        action ='store_true', 
-    	help ="allowing the formation of lone basepairing.")
+    	help ="motif to be aligned. The input is motif filename (json format). " + 
+		"Components of motif can be separated by '&' or '_'.")
 
     parser.add_argument('-f',
         '--filter',
@@ -189,8 +185,6 @@ if __name__ == "__main__":
     list_nu = ['A','U','T','G','C', 'a','u','t','g','c']
 
     args = main_argument()
-
-    print('Predicting seq/file:{}'.format(args.sequence))
 
     if args.pseudoknot:
         pkn = True
@@ -261,16 +255,14 @@ if __name__ == "__main__":
     if args.verbose:
         print("Calculating pairing probabilities...")
 
-    print(seq)
     pairing_dict = {}
     (propensity,ensemble_energy) = RNA.pf_fold(seq)
-    for i,j in itertools.combinations(range(1,len(seq)+1),2): #Have to start from 1, otherwise it will cause error sometimes
+    for i,j in itertools.combinations(range(len(seq)+1),2):
         prob = RNA.get_pr(i, j) 
         if prob >= 10**(-10):
             if -math.log10(prob) < -math.log10(args.threshold):
                 pairing_dict[(j-1,i-1)] = round(prob,int(-math.log10(args.threshold)) + 1)
 
-    print(pairing_dict)
     if args.verbose:
         print("Creating forbidden combination of motifs...")
     list_not_combine = []
@@ -294,9 +286,6 @@ if __name__ == "__main__":
         if len(list_not_combine) > 100000:
             sys.exit("Combinatorial explosion!")
 
-    print(filtered_motif_dict)
-    
-    #sys.exit()
     # Integer Programming
     num = 1
     superpose = True
@@ -352,40 +341,12 @@ if __name__ == "__main__":
                 ((i[1] in [j[1],j[0]]) or (i[0] in [j[1],j[0]]))):
                     m.add_constraint(y[i] + y[j] <= 1)
 
-        # Avoid lone basepair (Attemp)
-        if not(args.lone_basepair):
-            if args.verbose:
-                print("Adding constraints to avoid lone base pairings...")
-
-            for i in pairing_dict:
-                if ((not(i[0]+1 in [pair[0] for pair in pairing_dict]) and
-                not(i[0]-1 in [pair[0] for pair in pairing_dict])) or 
-                (not(i[1]+1 in [pair[1] for pair in pairing_dict]) and
-                not(i[1]-1 in [pair[1] for pair in pairing_dict]))):
-                    m.add_constraint(y[i] <= 0)
-                
-                else: 
-                    for pair1, pair2 in itertools.combinations(pairing_dict,2):
-                        if ((((pair1[0] == i[0]+1) and (pair2[0] == i[0]+1)) or
-                        ((pair2[0] == i[0]+1) and (pair1[0] == i[0]+1))) or
-                        (((pair1[1] == i[1]+1) and (pair2[1] == i[1]+1)) or
-                        ((pair2[1] == i[0]+1) and (pair1[1] == i[1]+1)))):
-                            m.add_constraint(y[pair1] - y[i] + y[pair2] >= 0)
-
-
+        # Avoid lone basepair (under development)
 
         # Avoid base pairing too closed:
-        if args.verbose:
-            print("Adding constraints to avoid close base pairings..")
-
         for i in pairing_dict:
             if i[0] <= (i[1] + 2):
                 m.add_constraint(y[i] <= 0)
-
-        for motif in filtered_motif_dict:
-            for i in filtered_motif_dict[motif]['pairing_pos']:
-                if i[0] <= (i[1] + 2):
-                    m.add_constraint(x[motif] <= 0)
 
         # Objective function
         prob_from_motifs = 0
@@ -420,7 +381,7 @@ if __name__ == "__main__":
                 m.add_constraint(sum([x[i]*sum(len(comp)**2 for comp in filtered_motif_dict[i]['pos']) for i in filtered_motif_dict]) >= sol_val_list[-1][0])
             else:
                 #if  sol_val_list[-1][0] <= t.objective_value - args.threshold:
-                if  sol_val_list[-1][0] <= t.objective_value and t.objective_value != 0:
+                if  sol_val_list[-1][0] <= t.objective_value:
                     m.add_constraint(sum([x[i]*sum(len(comp)**2 for comp in filtered_motif_dict[i]['pos']) for i in filtered_motif_dict]) >= sol_val_list[-1][0] + args.threshold)
                 else:
                     print("\nNo more non-dorminated solutions!")
@@ -460,7 +421,6 @@ if __name__ == "__main__":
 
         num += 1
 
-    print("List of solutions:")
     # Show the result
     sol_pair_list = []
     out_align = ''
@@ -479,7 +439,9 @@ if __name__ == "__main__":
                     align_site = align_site[:u] + '-' + align_site[(u + 1):]
 
                 align += align_site + '\t' + i.split('_')[0] + '\n'
-        struct2d = visual_structure(x, len(seq))
+        struct2d = '.'*len(seq)
+        for i in x:
+            struct2d = struct2d[:i[1]] + '(' + struct2d[(i[1] + 1):i[0]] + ')' + struct2d[(i[0] + 1):]
         
         print(struct2d + '\t' + str(score[0]) + '\t' + str(score[1]))
         print(align + '\n')
@@ -494,13 +456,12 @@ if __name__ == "__main__":
     #print("The whole variable set is: {0} ".format(sol_var_list))
     print("The result dict is: {0} ".format(sol_dict))
     #print("\nThe whole pair set is: {0} \n".format(sol_pair_list))
-    
+
     if args.outfile:
         with open('aligned_' + args.outfile,'w') as outfile1:
                 outfile1.write(out_align)
 
         with open(args.outfile,'w') as outfile2:
                 outfile2.write(json.dumps(sol_dict, indent= 2))
-    sys.exit()
     
     
